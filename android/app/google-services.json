@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "981352853260",
+    "project_id": "waste-reportingapp",
+    "storage_bucket": "waste-reportingapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:981352853260:android:58347c80b541e293b92329",
+        "android_client_info": {
+          "package_name": "com.example.civilianapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlfQ0aQ056EGa-JqT1T98-WgVwA3ObyQM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
