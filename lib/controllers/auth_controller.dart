@@ -1,50 +1,84 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/auth_service.dart';
 
 class AuthController extends GetxController {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final AuthService _authService = AuthService();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Login user with email & password
+  final RxBool isLoading = false.obs;
+
+  /// ---------------- LOGIN ----------------
   Future<void> login(String email, String password) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      isLoading.value = true;
 
-      // Navigate to Home screen
+      await _authService.login(email: email, password: password);
+
       Get.offAllNamed('/home');
     } on FirebaseAuthException catch (e) {
-      Get.snackbar(
-        "Login Failed",
-        e.message ?? "Something went wrong",
-        snackPosition: SnackPosition.BOTTOM,
-      );
+      String msg = "Login failed";
+
+      if (e.code == 'user-not-found') {
+        msg = "No account found for this email";
+      } else if (e.code == 'wrong-password') {
+        msg = "Incorrect password";
+      } else if (e.code == 'invalid-email') {
+        msg = "Invalid email address";
+      }
+
+      Get.snackbar("Login Failed", msg, snackPosition: SnackPosition.BOTTOM);
+    } finally {
+      isLoading.value = false;
     }
   }
 
-  /// Register new user
+  /// ---------------- REGISTER ----------------
   Future<void> register(String email, String password) async {
     try {
-      await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      isLoading.value = true;
 
-      // Navigate to Home screen
+      await _authService.register(email: email, password: password);
+
+      final user = _authService.currentUser;
+      if (user == null) throw Exception("User creation failed");
+
+      /// ✅ CREATE FIRESTORE USER DOCUMENT (AUTOMATIC)
+      await _db.collection('users').doc(user.uid).set({
+        'email': email,
+        'role': 'user', // default role
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
       Get.offAllNamed('/home');
     } on FirebaseAuthException catch (e) {
+      String msg = "Registration failed";
+
+      if (e.code == 'email-already-in-use') {
+        msg = "Email already registered";
+      } else if (e.code == 'weak-password') {
+        msg = "Password must be at least 6 characters";
+      } else if (e.code == 'invalid-email') {
+        msg = "Invalid email address";
+      }
+
       Get.snackbar(
         "Registration Failed",
-        e.message ?? "Something went wrong",
+        msg,
         snackPosition: SnackPosition.BOTTOM,
       );
+    } finally {
+      isLoading.value = false;
     }
   }
 
-  /// Logout user
+  /// ---------------- LOGOUT ----------------
   Future<void> logout() async {
-    await _auth.signOut();
+    await _authService.logout();
     Get.offAllNamed('/login');
   }
 
-  /// Get current user (helper)
-  User? get currentUser => _auth.currentUser;
+  /// ---------------- CURRENT USER ----------------
+  User? get currentUser => _authService.currentUser;
 }

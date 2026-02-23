@@ -1,0 +1,9 @@
+latitude,longitude,area_type,population,nearby_houses,road_accessibility,severity,priority
+17.03,81.72,Urban,2000,300,Easy,High,High
+17.05,81.70,Rural,500,40,Medium,Medium,Medium
+17.01,81.71,Urban,3000,500,Easy,High,High
+17.07,81.75,Rural,200,20,Hard,Low,Low
+17.06,81.73,Urban,1500,200,Medium,Medium,Medium
+17.02,81.74,Rural,100,10,Hard,Low,Low
+17.08,81.76,Urban,2500,350,Easy,High,High
+17.04,81.77,Rural,800,60,Medium,Medium,Medium

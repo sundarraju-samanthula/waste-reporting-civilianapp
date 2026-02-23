@@ -1,10 +1,9 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import '../../controllers/report_controller.dart';
 
 class AddReportScreen extends StatefulWidget {
   const AddReportScreen({super.key});
@@ -16,8 +15,12 @@ class AddReportScreen extends StatefulWidget {
 class _AddReportScreenState extends State<AddReportScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  final ReportController reportController = Get.put(
+    ReportController(),
+    permanent: true,
+  );
+
   File? _image;
-  bool _loading = false;
 
   String _areaType = 'Urban';
   String _accessibility = 'Easy';
@@ -25,193 +28,311 @@ class _AddReportScreenState extends State<AddReportScreen> {
   final _populationCtrl = TextEditingController();
   final _householdsCtrl = TextEditingController();
 
-  /* ---------------- Image Picker ---------------- */
   Future<void> _pickImage() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.camera,
       imageQuality: 75,
     );
+
     if (picked != null) {
-      setState(() => _image = File(picked.path));
+      setState(() {
+        _image = File(picked.path);
+      });
     }
   }
 
-  /* ---------------- Location ---------------- */
-  Future<Position> _getLocation() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      throw 'Location services disabled';
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    return await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-  }
-
-  /* ---------------- Submit Report ---------------- */
   Future<void> _submitReport() async {
-    if (!_formKey.currentState!.validate() || _image == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Complete all fields")));
+    if (_image == null) {
+      Get.snackbar(
+        "Error",
+        "Please capture image",
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
 
-    setState(() => _loading = true);
+    if (!_formKey.currentState!.validate()) return;
 
     try {
-      final user = FirebaseAuth.instance.currentUser!;
-      final position = await _getLocation();
-
-      /* Upload Image */
-      final fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      final ref = FirebaseStorage.instance.ref().child(
-        'waste_images/$fileName.jpg',
+      await reportController.submitReport(
+        image: _image!,
+        areaType: _areaType,
+        population: int.parse(_populationCtrl.text),
+        households: int.parse(_householdsCtrl.text),
+        accessibility: _accessibility,
       );
 
-      await ref.putFile(_image!);
-      final imageUrl = await ref.getDownloadURL();
+      Get.snackbar(
+        "Success",
+        "Report Submitted Successfully",
+        snackPosition: SnackPosition.BOTTOM,
+      );
 
-      /* Save Firestore Data */
-      await FirebaseFirestore.instance.collection('waste_reports').add({
-        'userId': user.uid,
-        'imageUrl': imageUrl,
-        'location': {
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-        },
-        'areaType': _areaType,
-        'population': int.parse(_populationCtrl.text),
-        'households': int.parse(_householdsCtrl.text),
-        'accessibility': _accessibility,
-        'timestamp': FieldValue.serverTimestamp(),
-        'mlResult': {
-          'severity': 'Pending',
-          'priorityScore': 0.0,
-          'status': 'Pending',
-        },
+      _formKey.currentState!.reset();
+
+      setState(() {
+        _image = null;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Report submitted successfully")),
-      );
-
-      Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
-    } finally {
-      setState(() => _loading = false);
+      Get.snackbar("Error", e.toString(), snackPosition: SnackPosition.BOTTOM);
     }
   }
 
-  /* ---------------- UI ---------------- */
+  Widget background() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color.fromARGB(255, 39, 75, 207),
+            Color.fromARGB(255, 29, 163, 26),
+            Color.fromARGB(255, 12, 81, 9),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+    );
+  }
+
+  Widget textField({
+    required String hint,
+    required TextEditingController controller,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+
+      child: TextFormField(
+        controller: controller,
+
+        keyboardType: TextInputType.number,
+
+        style: const TextStyle(color: Colors.white),
+
+        decoration: InputDecoration(
+          labelText: hint,
+
+          labelStyle: const TextStyle(color: Colors.white70),
+
+          filled: true,
+
+          fillColor: Colors.white.withOpacity(.15),
+
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+        ),
+
+        validator: (v) {
+          if (v == null || v.isEmpty) {
+            return "Required";
+          }
+          return null;
+        },
+      ),
+    );
+  }
+
+  Widget dropdown({
+    required String value,
+    required String label,
+    required List<String> items,
+    required Function(String?) onChanged,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+
+      child: DropdownButtonFormField<String>(
+        value: value,
+
+        dropdownColor: const Color(0xff5f3dc4),
+
+        style: const TextStyle(color: Colors.white),
+
+        decoration: InputDecoration(
+          labelText: label,
+
+          labelStyle: const TextStyle(color: Colors.white70),
+
+          filled: true,
+
+          fillColor: Colors.white.withOpacity(.15),
+
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+        ),
+
+        items: items
+            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+            .toList(),
+
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget imagePicker() {
+    return GestureDetector(
+      onTap: _pickImage,
+
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+
+          child: Container(
+            height: 220,
+            width: double.infinity,
+
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+
+              color: Colors.white.withOpacity(.15),
+
+              border: Border.all(color: Colors.white.withOpacity(.25)),
+            ),
+
+            child: _image == null
+                ? const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+
+                    children: [
+                      Icon(Icons.camera_alt, color: Colors.white, size: 50),
+
+                      SizedBox(height: 10),
+
+                      Text(
+                        "Tap to Capture Image",
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ],
+                  )
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.file(_image!, fit: BoxFit.cover),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget submitButton() {
+    return Obx(
+      () => reportController.isLoading.value
+          ? const CircularProgressIndicator(color: Colors.white)
+          : GestureDetector(
+              onTap: _submitReport,
+
+              child: Container(
+                height: 55,
+
+                width: double.infinity,
+
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+
+                  gradient: const LinearGradient(
+                    colors: [Color(0xff5A67D8), Color(0xff7F9CF5)],
+                  ),
+                ),
+
+                child: const Center(
+                  child: Text(
+                    "Submit Report",
+
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Add Waste Report")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              /* Image */
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  height: 200,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.green),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: _image == null
-                      ? const Center(child: Icon(Icons.camera_alt, size: 50))
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_image!, fit: BoxFit.cover),
-                        ),
-                ),
-              ),
+      body: Stack(
+        children: [
+          background(),
 
-              const SizedBox(height: 16),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
 
-              /* Area Type */
-              DropdownButtonFormField(
-                value: _areaType,
-                decoration: const InputDecoration(
-                  labelText: "Area Type",
-                  border: OutlineInputBorder(),
-                ),
-                items: ['Urban', 'Rural']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) => setState(() => _areaType = v!),
-              ),
+              child: Form(
+                key: _formKey,
 
-              const SizedBox(height: 12),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
 
-              /* Population */
-              TextFormField(
-                controller: _populationCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Population Around",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => v!.isEmpty ? "Enter population" : null,
-              ),
+                    const Text(
+                      "Add Waste Report",
 
-              const SizedBox(height: 12),
-
-              /* Households */
-              TextFormField(
-                controller: _householdsCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Nearby Households",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => v!.isEmpty ? "Enter households" : null,
-              ),
-
-              const SizedBox(height: 12),
-
-              /* Accessibility */
-              DropdownButtonFormField(
-                value: _accessibility,
-                decoration: const InputDecoration(
-                  labelText: "Accessibility",
-                  border: OutlineInputBorder(),
-                ),
-                items: ['Easy', 'Medium', 'Hard']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) => setState(() => _accessibility = v!),
-              ),
-
-              const SizedBox(height: 24),
-
-              /* Submit */
-              _loading
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton(
-                      onPressed: _submitReport,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      child: const Text("Submit Report"),
                     ),
-            ],
+
+                    const SizedBox(height: 20),
+
+                    imagePicker(),
+
+                    const SizedBox(height: 20),
+
+                    dropdown(
+                      value: _areaType,
+                      label: "Area Type",
+                      items: const ["Urban", "Rural"],
+                      onChanged: (v) {
+                        setState(() {
+                          _areaType = v!;
+                        });
+                      },
+                    ),
+
+                    textField(
+                      hint: "Population Around",
+                      controller: _populationCtrl,
+                    ),
+
+                    textField(
+                      hint: "Nearby Households",
+                      controller: _householdsCtrl,
+                    ),
+
+                    dropdown(
+                      value: _accessibility,
+                      label: "Accessibility",
+                      items: const ["Easy", "Medium", "Hard"],
+                      onChanged: (v) {
+                        setState(() {
+                          _accessibility = v!;
+                        });
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    submitButton(),
+
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
